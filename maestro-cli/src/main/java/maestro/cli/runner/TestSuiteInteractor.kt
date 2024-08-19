@@ -16,12 +16,10 @@ import maestro.orchestra.Orchestra
 import maestro.orchestra.util.Env.withEnv
 import maestro.orchestra.workspace.WorkspaceExecutionPlanner
 import maestro.orchestra.yaml.YamlCommandReader
-import okio.Sink
-import okio.sink
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Path
-import kotlin.math.roundToLong
+import kotlin.io.path.name
 import kotlin.system.measureTimeMillis
 import kotlin.time.Duration.Companion.seconds
 
@@ -53,8 +51,7 @@ class TestSuiteInteractor(
         // first run sequence of flows if present
         val flowSequence = executionPlan.sequence
         for (flow in flowSequence?.flows ?: emptyList()) {
-            val result = runFlow(flow.toFile(), env, maestro, debugOutputPath)
-            flowResults.add(result)
+            val result = runFlowWithRetry(flow, env, debugOutputPath, flowResults)
 
             if (result.status == FlowStatus.ERROR) {
                 passed = false
@@ -68,12 +65,11 @@ class TestSuiteInteractor(
 
         // proceed to run all other Flows
         executionPlan.flowsToRun.forEach { flow ->
-            val result = runFlow(flow.toFile(), env, maestro, debugOutputPath)
+            val result = runFlowWithRetry(flow, env, debugOutputPath, flowResults)
 
             if (result.status == FlowStatus.ERROR) {
                 passed = false
             }
-            flowResults.add(result)
         }
 
 
@@ -248,4 +244,35 @@ class TestSuiteInteractor(
         )
     }
 
+    private val maxRetries = System.getenv("TEST_MAX_RETRIES")?.toIntOrNull() ?: 1
+
+    private fun runFlowWithRetry(
+        flow: Path,
+        env: Map<String, String>,
+        debugOutputPath: Path,
+        flowResults: MutableList<TestExecutionSummary.FlowResult>
+    ): TestExecutionSummary.FlowResult {
+        var attempt = 0
+        var flowResult: TestExecutionSummary.FlowResult? = null
+
+        while (attempt < maxRetries && flowResult?.status != FlowStatus.SUCCESS) {
+            if (attempt == 0) {
+                logger.info("Executing test ${flow.name}. Attempt $attempt")
+            } else {
+                logger.error("Retrying test execution for: ${flow.name}. Attempt $attempt")
+            }
+
+            flowResult = runFlow(flow.toFile(), env, maestro, debugOutputPath)
+
+            if (attempt < maxRetries && flowResult.status != FlowStatus.SUCCESS) {
+                logger.error("Test execution for: ${flow.name}. Attempt $attempt is not SUCCESS. ${flowResult.failure?.message}")
+            }
+
+            attempt += 1
+        }
+
+        flowResults.add(flowResult!!)
+
+        return  flowResult!!
+    }
 }
