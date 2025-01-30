@@ -21,7 +21,6 @@ import maestro.orchestra.Orchestra
 import maestro.orchestra.util.Env.withEnv
 import maestro.orchestra.workspace.WorkspaceExecutionPlanner
 import maestro.orchestra.yaml.YamlCommandReader
-import okio.Sink
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Path
@@ -72,8 +71,8 @@ class TestSuiteInteractor(
             val updatedEnv = env
                 .withInjectedShellEnvVars()
                 .withDefaultEnvVars(flowFile)
-            val (result, aiOutput) = runFlow(flowFile, updatedEnv, maestro, debugOutputPath)
-            flowResults.add(result)
+            val (result, aiOutput) = runFlowWithRetry(flowFile, updatedEnv, maestro, debugOutputPath, flowResults)
+//             flowResults.add(result)  -> is done here runFlowWithRetry2
             aiOutputs.add(aiOutput)
 
             if (result.status == FlowStatus.ERROR) {
@@ -92,13 +91,13 @@ class TestSuiteInteractor(
             val updatedEnv = env
                 .withInjectedShellEnvVars()
                 .withDefaultEnvVars(flowFile)
-            val (result, aiOutput) = runFlow(flowFile, updatedEnv, maestro, debugOutputPath)
+            val (result, aiOutput) = runFlowWithRetry(flowFile, updatedEnv, maestro, debugOutputPath, flowResults)
             aiOutputs.add(aiOutput)
 
             if (result.status == FlowStatus.ERROR) {
                 passed = false
             }
-            flowResults.add(result)
+            // flowResults.add(result) -> is done here runFlowWithRetry2
         }
 
 
@@ -281,4 +280,39 @@ class TestSuiteInteractor(
         )
     }
 
+    private val maxRetries = System.getenv("TEST_MAX_RETRIES")?.toIntOrNull() ?: 1
+
+    private fun runFlowWithRetry(
+        flowFile: File,
+        env: Map<String, String>,
+        maestro: Maestro,
+        debugOutputPath: Path,
+        flowResults: MutableList<TestExecutionSummary.FlowResult>
+    ): Pair<TestExecutionSummary.FlowResult, FlowAIOutput> {
+        var attempt = 0
+        var flowResult: TestExecutionSummary.FlowResult? = null
+        var aiOutput: FlowAIOutput? = null
+
+        while (attempt < maxRetries && flowResult?.status != FlowStatus.SUCCESS) {
+            if (attempt == 0) {
+                logger.info("Executing test ${flowFile.name}. Attempt $attempt")
+            } else {
+                logger.error("Retrying test execution for: ${flowFile.name}. Attempt $attempt")
+            }
+
+            val attemptResult = runFlow(flowFile, env, maestro, debugOutputPath)
+            flowResult = attemptResult.first
+            aiOutput = attemptResult.second
+
+            if (flowResult.status != FlowStatus.SUCCESS) {
+                logger.error("Test execution for: ${flowFile.name}. Attempt $attempt is not SUCCESS. ${flowResult.failure?.message}")
+            }
+
+            attempt += 1
+        }
+
+        flowResults.add(flowResult!!)
+
+        return Pair(flowResult!!, aiOutput!!)
+    }
 }
