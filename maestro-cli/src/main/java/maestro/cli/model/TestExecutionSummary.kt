@@ -1,5 +1,10 @@
 package maestro.cli.model
 
+import maestro.MaestroException
+import maestro.cli.report.CommandDebugMetadata
+import maestro.cli.report.FlowDebugOutput.Screenshot
+import maestro.orchestra.MaestroCommand
+import java.util.*
 import kotlin.time.Duration
 
 // TODO: Some properties should be implemented as getters, but it's not possible.
@@ -28,5 +33,8 @@ data class TestExecutionSummary(
 
     data class Failure(
         val message: String,
+        val commands: IdentityHashMap<MaestroCommand, CommandDebugMetadata>? = null,
+        val screenshots: MutableList<Screenshot>? = null,
+        var exception: MaestroException? = null
     )
 }

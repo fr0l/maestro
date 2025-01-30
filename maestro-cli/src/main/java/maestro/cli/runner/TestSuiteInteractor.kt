@@ -270,6 +270,9 @@ class TestSuiteInteractor(
                 failure = if (flowStatus == FlowStatus.ERROR) {
                     TestExecutionSummary.Failure(
                         message = shardPrefix + (errorMessage ?: debugOutput.exception?.message ?: "Unknown error"),
+                        commands = debugOutput.commands,
+                        screenshots = debugOutput.screenshots,
+                        exception = debugOutput.exception
                     )
                 } else null,
                 duration = flowDuration,
