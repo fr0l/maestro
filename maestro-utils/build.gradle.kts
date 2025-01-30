@@ -10,6 +10,7 @@ plugins {
 dependencies {
     api(libs.square.okio)
     implementation(libs.square.okhttp)
+    implementation(libs.slf4j)
     implementation(libs.micrometer.core)
     implementation(libs.micrometer.observation)
 

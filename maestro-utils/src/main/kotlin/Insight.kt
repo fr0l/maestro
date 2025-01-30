@@ -1,20 +1,34 @@
 package maestro.utils
 
-object CliInsights: Insights {
+import org.slf4j.LoggerFactory
+import java.util.concurrent.ConcurrentLinkedQueue
 
-    private var insight: Insight = Insight("", Insight.Level.NONE)
-    private val listeners = mutableListOf<(Insight) -> Unit>()
+object CliInsights: Insights {
+    private val logger = LoggerFactory.getLogger(Insights::class.java)
+
+    private val listeners = ConcurrentLinkedQueue<(Insight) -> Unit>()
 
     override fun report(insight: Insight) {
-        CliInsights.insight = insight
-        listeners.forEach { it.invoke(insight) }
+        if (insight != null) {
+            listeners.forEach { it.invoke(insight) }
+        } else {
+            logger.error("report: The insight object is NULL. The call stack is this:\n" + Thread.currentThread().stackTrace.joinToString("\n"))
+        }
     }
 
     override fun onInsightsUpdated(callback: (Insight) -> Unit) {
-        listeners.add(callback)
+        if (callback != null) {
+            listeners.add(callback)
+        } else {
+            logger.error("onInsightsUpdated: The insight object is NULL. The call stack is this:\n" + Thread.currentThread().stackTrace.joinToString("\n"))
+        }
     }
 
     override fun unregisterListener(callback: (Insight) -> Unit) {
-        listeners.remove(callback)
+        if (callback != null) {
+            listeners.remove(callback)
+        } else {
+            logger.error("unregisterListener: The insight object is NULL. The call stack is this:\n" + Thread.currentThread().stackTrace.joinToString("\n"))
+        }
     }
 }
